@@ -75,3 +75,5 @@ reinícios. Ao subir, jobs que estavam `RUNNING` viram `FAILED` ("API da VM foi 
 Exemplo de unidade systemd em [deploy/vm-rpa-api.service](deploy/vm-rpa-api.service). Conforme o
 contrato: restringir a porta via firewall ao IP do Laravel, usar rede privada/VPN e TLS
 (proxy reverso ou `--ssl-keyfile/--ssl-certfile` no uvicorn) e rotacionar o token.
+
+VMs que só têm a porta 5000 liberada no GCP: ver [docs/migracao-porta-5000.md](docs/migracao-porta-5000.md).
