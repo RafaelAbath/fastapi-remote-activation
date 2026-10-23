@@ -18,7 +18,7 @@ def get_runner(request: Request) -> JobRunner:
     return request.app.state.runner
 
 
-def _to_response(job: Job) -> JobResponse:
+def _to_response(job: Job, runner: JobRunner) -> JobResponse:
     return JobResponse(
         job_id=job.job_id,
         execution_id=job.execution_id,
@@ -29,6 +29,7 @@ def _to_response(job: Job) -> JobResponse:
         metrics=job.metrics,
         log_tail=job.log_tail,
         error=job.error,
+        ingestao=runner.store.contagem_ingestao(job.job_id),
     )
 
 
@@ -63,7 +64,7 @@ async def get_job(job_id: str, runner: JobRunner = Depends(get_runner)) -> JobRe
     job = runner.get(job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job não encontrado")
-    return _to_response(job)
+    return _to_response(job, runner)
 
 
 @router.post(
@@ -78,4 +79,4 @@ async def cancel_job(job_id: str, runner: JobRunner = Depends(get_runner)) -> Jo
         ) from None
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job não encontrado")
-    return _to_response(job)
+    return _to_response(job, runner)

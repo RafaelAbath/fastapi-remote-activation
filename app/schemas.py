@@ -53,3 +53,5 @@ class JobResponse(BaseModel):
     metrics: dict[str, Any]
     log_tail: list[str]
     error: str | None
+    # Envio dos resultados ao painel: {"pendentes", "enviados", "rejeitados"}.
+    ingestao: dict[str, int]

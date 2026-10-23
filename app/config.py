@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     log_tail_lines: int = Field(default=200, ge=1)
     timezone: str = "America/Sao_Paulo"
 
+    # Envio dos resultados (::extracao / ::designacao) ao painel. Sem URL, os itens ficam guardados
+    # no SQLite e são enviados quando ela for configurada. O token é o próprio api_token da máquina.
+    painel_url: str | None = None
+    ingestao_intervalo_seconds: float = Field(default=5, gt=0)
+    ingestao_min_intervalo_seconds: float = Field(default=1, ge=0)  # o painel aceita 60 req/min
+    ingestao_lote_max: int = Field(default=1000, ge=1, le=1000)
+    ingestao_timeout_seconds: float = Field(default=15, gt=0)
+    ingestao_retencao_dias: int = Field(default=7, ge=1)
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "jobs.sqlite3"
