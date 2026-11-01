@@ -50,6 +50,9 @@ A documentação interativa (`/docs`, `/openapi.json`) fica desligada.
 | `VM_CANCEL_GRACE_SECONDS` | `10` | Tempo entre SIGTERM e SIGKILL no cancelamento |
 | `VM_LOG_TAIL_LINES` | `200` | Linhas mantidas em `log_tail` |
 | `VM_TIMEZONE` | `America/Sao_Paulo` | Fuso dos timestamps |
+| `VM_PAINEL_URL` | sem envio | URL do painel (ex.: `https://painel.exemplo.com.br`) para onde vão os resultados |
+| `VM_INGESTAO_INTERVALO_SECONDS` | `5` | Intervalo entre envios ao painel |
+| `VM_INGESTAO_RETENCAO_DIAS` | `7` | Por quanto tempo itens já enviados ficam no SQLite |
 
 ## Protocolo dos scripts
 
@@ -61,8 +64,34 @@ Veja [examples/fake_rpa.py](examples/fake_rpa.py).
 - stdout/stderr viram `log_tail` (com horário). Padrões como `senha=...`, `token: ...` e `Bearer ...`
   são mascarados, mas o script não deve imprimir dados sensíveis.
 - Linha `::metrics {"extraidos": 120}` atualiza as métricas (valores numéricos, mesclados).
+- Linhas `::extracao` e `::designacao` são resultados para o banco de senhas do painel (ver abaixo).
 - Saída `0` → `SUCCEEDED`; outro código → `FAILED` com a última linha de log no `error`.
 - Cancelamento envia SIGTERM ao grupo de processos e SIGKILL após o tempo de tolerância.
+
+## Envio dos resultados ao painel
+
+O script imprime cada resultado numa linha; a API guarda, agrupa e envia ao painel
+(`POST {VM_PAINEL_URL}/api/rpa/ingestao/extracoes` e `.../designacoes`) com o `execution_id` do job e
+o mesmo `VM_API_TOKEN` (o painel autentica a máquina por ele).
+
+```
+::extracao {"senha": "91787170"}
+::designacao {"senha": "91612540", "setor": "AUTORIZAÇÃO", "status": "Em análise", "tipo": "...", "situacao": "Aberta", "plano": "...", "regra": "...", "designada_em": "2026-10-19T16:10:29-03:00"}
+```
+
+- O valor pode ser um objeto ou uma lista de objetos. `senha` é obrigatória; na designação, `setor` também.
+  Valores `null` são omitidos.
+- Sem `extraida_em` / `designada_em`, vale o horário em que a API leu a linha.
+- Essas linhas não entram no `log_tail`. Cada item conta em `metrics.extraidos` / `metrics.designados`;
+  não misture com `::metrics` para a mesma chave.
+- Item com formato inválido é descartado e o log mostra um aviso.
+- Lotes de até 1000 itens, no máximo 1 requisição por segundo (o painel aceita 60/min). O envio
+  acontece a cada `VM_INGESTAO_INTERVALO_SECONDS` e logo ao fim do job.
+- Os itens ficam no SQLite até o painel confirmar. Painel fora do ar, `5xx`, `401` ou `429`: tenta de
+  novo com espera crescente (até 5 min), inclusive depois de reiniciar a API. `422`: só os itens
+  apontados pelo painel são descartados (ou o lote inteiro, se o erro não for de um item).
+- `GET /api/v1/jobs/{job_id}` mostra o andamento em `ingestao: {pendentes, enviados, rejeitados}`.
+- Só jobs disparados pelo painel são enviados. Execuções manuais do script não chegam ao banco.
 
 ## Persistência e reinício
 

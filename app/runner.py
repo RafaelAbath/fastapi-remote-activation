@@ -11,6 +11,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.config import Settings
+from app.ingestao import IngestaoSender
 from app.schemas import JobCreateRequest, JobStatus
 from app.store import Job, JobStore
 
@@ -18,6 +19,14 @@ logger = logging.getLogger(__name__)
 
 # Linha que o script imprime para reportar contagens: ::metrics {"extraidos": 120}
 METRICS_PREFIX = "::metrics "
+
+# Linhas de resultado, repassadas ao painel: prefixo -> (tipo, campo de data, métrica contada).
+# Ex.: ::extracao {"senha": "91787170"}  |  ::designacao [{"senha": "...", "setor": "OPME"}, ...]
+RESULT_PREFIXES = {
+    "::extracao ": ("extracao", "extraida_em", "extraidos"),
+    "::designacao ": ("designacao", "designada_em", "designados"),
+}
+_CAMPOS_OBRIGATORIOS = {"extracao": ("senha",), "designacao": ("senha", "setor")}
 
 _SAVE_INTERVAL_SECONDS = 1.0
 _STREAM_LINE_LIMIT = 1024 * 1024
@@ -48,9 +57,10 @@ class JobNotCancellable(Exception):
 class JobRunner:
     """Fila local de jobs: cada job roda um script da allowlist como subprocesso desacoplado da requisição."""
 
-    def __init__(self, settings: Settings, store: JobStore):
+    def __init__(self, settings: Settings, store: JobStore, sender: IngestaoSender | None = None):
         self.settings = settings
         self.store = store
+        self.sender = sender
         self._tz = ZoneInfo(settings.timezone)
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._workers: list[asyncio.Task] = []
@@ -199,6 +209,8 @@ class JobRunner:
         returncode = await proc.wait()
         self._procs.pop(job.job_id, None)
         job.log_tail = list(tail)
+        if self.sender is not None:
+            self.sender.acordar()
 
         if job.cancel_requested:
             self._finish(job, JobStatus.CANCELLED)
@@ -223,8 +235,11 @@ class JobRunner:
             if not raw:
                 break
             line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+            result_prefix = next((p for p in RESULT_PREFIXES if line.startswith(p)), None)
             if line.startswith(METRICS_PREFIX):
                 _merge_metrics(job.metrics, line[len(METRICS_PREFIX):])
+            elif result_prefix is not None:
+                self._registrar_resultado(job, result_prefix, line[len(result_prefix):], tail)
             elif line.strip():
                 stamp = datetime.now(self._tz).strftime("%H:%M:%S")
                 tail.append(f"{stamp} {redact(line)}")
@@ -232,6 +247,35 @@ class JobRunner:
                 job.log_tail = list(tail)
                 self.store.save(job)
                 last_save = time.monotonic()
+
+    def _registrar_resultado(self, job: Job, prefix: str, payload: str, tail: deque[str]) -> None:
+        """Guarda no outbox os itens de uma linha ::extracao/::designacao (enviados depois ao painel)."""
+        tipo, campo_data, metrica = RESULT_PREFIXES[prefix]
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            data = None
+        itens = data if isinstance(data, list) else [data]
+
+        agora = self.now()
+        validos = []
+        for item in itens:
+            if not isinstance(item, dict) or "senha" not in item:
+                continue
+            item = {k: v for k, v in item.items() if v is not None}
+            if isinstance(item["senha"], int):
+                item["senha"] = str(item["senha"])
+            if not all(isinstance(item.get(c), str) and item[c].strip() for c in _CAMPOS_OBRIGATORIOS[tipo]):
+                continue
+            item.setdefault(campo_data, agora)
+            validos.append(item)
+
+        if len(validos) < len(itens):
+            stamp = datetime.now(self._tz).strftime("%H:%M:%S")
+            tail.append(f"{stamp} aviso: {len(itens) - len(validos)} item(ns) de {prefix.strip()} ignorado(s) por formato inválido")
+        if validos:
+            self.store.adicionar_itens(job.job_id, job.execution_id, tipo, validos, agora)
+            job.metrics[metrica] = job.metrics.get(metrica, 0) + len(validos)
 
     def _finish(self, job: Job, status: JobStatus, error: str | None = None) -> None:
         job.status = status

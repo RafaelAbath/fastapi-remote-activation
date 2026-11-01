@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -8,23 +9,29 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.api import router
 from app.config import Settings, get_settings
+from app.ingestao import IngestaoSender
 from app.runner import JobRunner
 from app.store import JobStore
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, painel_transport: httpx.AsyncBaseTransport | None = None
+) -> FastAPI:
     settings = settings or get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         store = JobStore(settings.db_path)
-        runner = JobRunner(settings, store)
+        sender = IngestaoSender(settings, store, transport=painel_transport)
+        runner = JobRunner(settings, store, sender)
         app.state.runner = runner
+        await sender.start()
         await runner.start()
         try:
             yield
         finally:
             await runner.stop()
+            await sender.stop()
             store.close()
 
     app = FastAPI(
@@ -53,3 +60,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# Cada POST ao painel apareceria no log do serviço; falhas já são registradas pelo IngestaoSender.
+logging.getLogger("httpx").setLevel(logging.WARNING)

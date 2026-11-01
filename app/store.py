@@ -43,6 +43,27 @@ CREATE TABLE IF NOT EXISTS jobs (
 )
 """
 
+# Outbox dos resultados que os scripts imprimem, até o painel confirmar o recebimento.
+_SCHEMA_INGESTAO = """
+CREATE TABLE IF NOT EXISTS ingestao (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id       TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    tipo         TEXT NOT NULL,
+    item         TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'PENDENTE',
+    erro         TEXT,
+    criado_em    TEXT NOT NULL,
+    enviado_em   TEXT
+);
+CREATE INDEX IF NOT EXISTS ingestao_status ON ingestao (status, tipo, execution_id, id);
+CREATE INDEX IF NOT EXISTS ingestao_job ON ingestao (job_id);
+"""
+
+PENDENTE = "PENDENTE"
+ENVIADO = "ENVIADO"
+REJEITADO = "REJEITADO"
+
 _COLUMNS = (
     "job_id", "idempotency_key", "execution_id", "script", "parameters", "created_at",
     "status", "started_at", "finished_at", "metrics", "log_tail", "error", "cancel_requested",
@@ -59,6 +80,7 @@ class JobStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_SCHEMA)
+        self._conn.executescript(_SCHEMA_INGESTAO)
         self._conn.commit()
 
     def close(self) -> None:
@@ -98,6 +120,62 @@ class JobStore:
                 "SELECT * FROM jobs WHERE status = ? ORDER BY created_at", (JobStatus.QUEUED.value,)
             ).fetchall()
         return [self._to_job(r) for r in rows]
+
+    def adicionar_itens(
+        self, job_id: str, execution_id: str, tipo: str, itens: list[dict[str, Any]], agora: str
+    ) -> None:
+        with self._lock:
+            self._conn.executemany(
+                "INSERT INTO ingestao (job_id, execution_id, tipo, item, criado_em) VALUES (?, ?, ?, ?, ?)",
+                [(job_id, execution_id, tipo, json.dumps(i, ensure_ascii=False), agora) for i in itens],
+            )
+            self._conn.commit()
+
+    def grupos_pendentes(self) -> list[tuple[str, str]]:
+        """(tipo, execution_id) com itens pendentes, do mais antigo para o mais novo."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT tipo, execution_id FROM ingestao WHERE status = ? "
+                "GROUP BY tipo, execution_id ORDER BY MIN(id)",
+                (PENDENTE,),
+            ).fetchall()
+        return [(r["tipo"], r["execution_id"]) for r in rows]
+
+    def pendentes(self, tipo: str, execution_id: str, limite: int) -> list[tuple[int, dict[str, Any]]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, item FROM ingestao WHERE status = ? AND tipo = ? AND execution_id = ? "
+                "ORDER BY id LIMIT ?",
+                (PENDENTE, tipo, execution_id, limite),
+            ).fetchall()
+        return [(r["id"], json.loads(r["item"])) for r in rows]
+
+    def marcar(self, ids: list[int], status: str, agora: str, erro: str | None = None) -> None:
+        with self._lock:
+            self._conn.executemany(
+                "UPDATE ingestao SET status = ?, erro = ?, enviado_em = ? WHERE id = ?",
+                [(status, erro, agora, i) for i in ids],
+            )
+            self._conn.commit()
+
+    def contagem_ingestao(self, job_id: str) -> dict[str, int]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT status, COUNT(*) AS n FROM ingestao WHERE job_id = ? GROUP BY status", (job_id,)
+            ).fetchall()
+        por_status = {r["status"]: r["n"] for r in rows}
+        return {
+            "pendentes": por_status.get(PENDENTE, 0),
+            "enviados": por_status.get(ENVIADO, 0),
+            "rejeitados": por_status.get(REJEITADO, 0),
+        }
+
+    def purgar_enviados(self, antes_de: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM ingestao WHERE status = ? AND enviado_em < ?", (ENVIADO, antes_de)
+            )
+            self._conn.commit()
 
     def _fetch_one(self, sql: str, *args: Any) -> Job | None:
         with self._lock:
