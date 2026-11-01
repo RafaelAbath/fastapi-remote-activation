@@ -25,8 +25,9 @@ METRICS_PREFIX = "::metrics "
 RESULT_PREFIXES = {
     "::extracao ": ("extracao", "extraida_em", "extraidos"),
     "::designacao ": ("designacao", "designada_em", "designados"),
+    "::envio_aria ": ("envio_aria", "enviada_em", "enviados_aria"),
 }
-_CAMPOS_OBRIGATORIOS = {"extracao": ("senha",), "designacao": ("senha", "setor")}
+_CAMPOS_OBRIGATORIOS = {"extracao": ("senha",), "designacao": ("senha", "setor"), "envio_aria": ("senha",)}
 
 _SAVE_INTERVAL_SECONDS = 1.0
 _STREAM_LINE_LIMIT = 1024 * 1024
@@ -249,7 +250,7 @@ class JobRunner:
                 last_save = time.monotonic()
 
     def _registrar_resultado(self, job: Job, prefix: str, payload: str, tail: deque[str]) -> None:
-        """Guarda no outbox os itens de uma linha ::extracao/::designacao (enviados depois ao painel)."""
+        """Guarda no outbox os itens de uma linha de resultado (enviados depois ao painel)."""
         tipo, campo_data, metrica = RESULT_PREFIXES[prefix]
         try:
             data = json.loads(payload)

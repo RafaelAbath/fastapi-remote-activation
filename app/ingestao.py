@@ -13,7 +13,7 @@ from app.store import ENVIADO, REJEITADO, JobStore
 logger = logging.getLogger(__name__)
 
 # tipo do item -> rota do painel (POST /api/rpa/ingestao/...)
-ENDPOINTS = {"extracao": "extracoes", "designacao": "designacoes"}
+ENDPOINTS = {"extracao": "extracoes", "designacao": "designacoes", "envio_aria": "envios-aria"}
 
 _BACKOFF_MAX_SECONDS = 300
 _ERRO_DE_ITEM = re.compile(r"^itens\.(\d+)(\.|$)")
