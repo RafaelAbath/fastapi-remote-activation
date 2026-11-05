@@ -60,6 +60,15 @@ Veja [examples/fake_rpa.py](examples/fake_rpa.py).
 
 - O comando vem da allowlist; nada da requisição é interpretado como comando.
   `limit` é repassado como `--limit N` e em `RPA_LIMIT`. Também recebem `RPA_JOB_ID` e `RPA_EXECUTION_ID`.
+- `envio_aria` aceita só `lote` (texto) e `sem_aria` (booleano); os outros scripts, só `limit`.
+  Parâmetro fora disso → `422`. Flags montadas para o `envio_aria`:
+
+  | O painel manda | A VM roda |
+  |---|---|
+  | `{}` | `--enviar --sem-confirmacao` |
+  | `{"lote": "opme"}` | `--enviar --sem-confirmacao --lote opme` |
+  | `{"sem_aria": true}` | `--sem-aria` |
+  | `{"sem_aria": true, "lote": "odonto"}` | `--sem-aria --lote odonto` |
 - Variáveis `VM_*` (incluindo o token) **não** são repassadas aos scripts.
 - stdout/stderr viram `log_tail` (com horário). Padrões como `senha=...`, `token: ...` e `Bearer ...`
   são mascarados, mas o script não deve imprimir dados sensíveis.

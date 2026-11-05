@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from app import __version__
-from app.runner import IdempotencyConflict, JobNotCancellable, JobRunner
+from app.runner import IdempotencyConflict, JobNotCancellable, JobRunner, parametros_aceitos
 from app.schemas import (
     HealthResponse,
     JobCreatedResponse,
@@ -48,6 +48,12 @@ async def create_job(
         raise HTTPException(
             status_code=422,
             detail=f"Script não permitido nesta VM: '{body.script}'",
+        )
+    recusados = set(body.parameters.model_dump(exclude_none=True)) - parametros_aceitos(body.script)
+    if recusados:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Parâmetro(s) não aceito(s) pelo script '{body.script}': {', '.join(sorted(recusados))}",
         )
     try:
         job = runner.submit(idempotency_key or body.execution_id, body)

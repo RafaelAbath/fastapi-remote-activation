@@ -22,6 +22,9 @@ if mode == "ok":
 if mode == "fail":
     print("erro de login", flush=True)
     sys.exit(3)
+if mode == "argv":
+    print("args: " + " ".join(sys.argv[2:]), flush=True)
+    sys.exit(0)
 if mode == "slow":
     print("iniciando", flush=True)
     time.sleep(30)
@@ -38,6 +41,7 @@ def client(tmp_path: Path):
             "extracao": [sys.executable, str(script), "ok"],
             "designacao": [sys.executable, str(script), "fail"],
             "lento": [sys.executable, str(script), "slow"],
+            "envio_aria": [sys.executable, str(script), "argv"],
         },
         data_dir=tmp_path / "data",
         cancel_grace_seconds=1,
@@ -118,6 +122,10 @@ def test_failed_job(client):
         {"parameters": {"limit": 10001}},
         {"parameters": {"limit": "10"}},
         {"parameters": {"comando": "ls"}},
+        {"parameters": {"lote": "opme"}},
+        {"script": "envio_aria", "parameters": {"limit": 10}},
+        {"script": "envio_aria", "parameters": {"lote": "opme; rm -rf /"}},
+        {"script": "envio_aria", "parameters": {"sem_aria": "sim"}},
     ],
 )
 def test_rejects_invalid_payload(client, kwargs):
@@ -156,3 +164,20 @@ def test_cancel_finished_job_is_409(client):
 def test_unknown_job_is_404(client):
     assert client.get("/api/v1/jobs/j-nao-existe", headers=AUTH).status_code == 404
     assert client.post("/api/v1/jobs/j-nao-existe/cancel", headers=AUTH).status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("parameters", "esperado"),
+    [
+        ({}, "--enviar --sem-confirmacao"),
+        ({"lote": "opme"}, "--enviar --sem-confirmacao --lote opme"),
+        ({"sem_aria": True}, "--sem-aria"),
+        ({"sem_aria": True, "lote": "odonto"}, "--sem-aria --lote odonto"),
+        ({"sem_aria": False, "lote": "prazo"}, "--enviar --sem-confirmacao --lote prazo"),
+    ],
+)
+def test_envio_aria_monta_flags_do_painel(client, parameters, esperado):
+    job_id = create(client, script="envio_aria", parameters=parameters).json()["job_id"]
+    job = wait_final(client, job_id)
+    assert job["status"] == "SUCCEEDED"
+    assert job["log_tail"][0].split(" ", 1)[1] == f"args: {esperado}"
