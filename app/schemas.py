@@ -27,6 +27,9 @@ class JobParameters(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     limit: int | None = Field(default=None, ge=1, le=10000, strict=True)
+    # envio_aria: lote da Aria (ex.: "opme") e prévia sem consultar a Aria.
+    lote: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[\w .-]+$")
+    sem_aria: bool | None = Field(default=None, strict=True)
 
 
 class JobCreateRequest(BaseModel):

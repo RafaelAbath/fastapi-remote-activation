@@ -129,6 +129,26 @@ def test_resultados_sao_enviados_ao_painel(make_client, painel):
     assert designacao["designada_em"]
 
 
+def test_envio_aria_vai_para_a_rota_propria(make_client, painel):
+    saida = linhas(
+        '::envio_aria [{"senha": "1", "lote": "PRAZO", "auditoria_id": "77", "enviada_em": "2026-10-31T10:00:00-03:00"},'
+        ' {"senha": 2, "lote": "PRAZO", "auditoria_id": null}]',
+    )
+    with make_client(saida) as client:
+        job_id = disparar(client)
+        job = esperar(client, job_id, lambda j: j["ingestao"]["enviados"] == 2)
+
+    assert job["metrics"] == {"enviados_aria": 2}
+    assert job["log_tail"] == []
+    assert [r.url.path for r in painel.requests] == ["/api/rpa/ingestao/envios-aria"]
+    corpo = json.loads(painel.requests[0].content)
+    assert corpo["execution_id"] == EXECUTION_ID
+    assert corpo["itens"][0] == {"senha": "1", "lote": "PRAZO", "auditoria_id": "77", "enviada_em": "2026-10-31T10:00:00-03:00"}
+    assert corpo["itens"][1]["senha"] == "2"
+    assert "auditoria_id" not in corpo["itens"][1]  # null não é enviado
+    assert corpo["itens"][1]["enviada_em"]  # preenchida pela API
+
+
 def test_divide_em_lotes_de_1000(make_client, painel):
     itens = [{"senha": str(90000000 + i)} for i in range(1500)]
     with make_client(linhas("::extracao " + json.dumps(itens))) as client:

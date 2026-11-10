@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     log_tail_lines: int = Field(default=200, ge=1)
     timezone: str = "America/Sao_Paulo"
 
-    # Envio dos resultados (::extracao / ::designacao) ao painel. Sem URL, os itens ficam guardados
+    # Envio dos resultados (::extracao / ::designacao / ::envio_aria) ao painel. Sem URL, os itens ficam guardados
     # no SQLite e são enviados quando ela for configurada. O token é o próprio api_token da máquina.
     painel_url: str | None = None
     ingestao_intervalo_seconds: float = Field(default=5, gt=0)

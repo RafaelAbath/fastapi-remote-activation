@@ -25,8 +25,31 @@ METRICS_PREFIX = "::metrics "
 RESULT_PREFIXES = {
     "::extracao ": ("extracao", "extraida_em", "extraidos"),
     "::designacao ": ("designacao", "designada_em", "designados"),
+    "::envio_aria ": ("envio_aria", "enviada_em", "enviados_aria"),
 }
-_CAMPOS_OBRIGATORIOS = {"extracao": ("senha",), "designacao": ("senha", "setor")}
+_CAMPOS_OBRIGATORIOS = {"extracao": ("senha",), "designacao": ("senha", "setor"), "envio_aria": ("senha",)}
+
+# Parâmetros aceitos por script (nome em VM_SCRIPTS); os não listados aceitam só `limit`.
+PARAMETROS_POR_SCRIPT = {"envio_aria": {"lote", "sem_aria"}}
+PARAMETROS_PADRAO = {"limit"}
+
+
+def parametros_aceitos(script: str) -> set[str]:
+    return PARAMETROS_POR_SCRIPT.get(script, PARAMETROS_PADRAO)
+
+
+def montar_argv(base: list[str], script: str, parametros: dict) -> list[str]:
+    """Comando do VM_SCRIPTS + as flags que os parâmetros do painel pedem."""
+    argv = list(base)
+    if script == "envio_aria":
+        # Regra do painel: sem `sem_aria`, envia de verdade (a confirmação do terminal não se aplica).
+        argv += ["--sem-aria"] if parametros.get("sem_aria") else ["--enviar", "--sem-confirmacao"]
+        if "lote" in parametros:
+            argv += ["--lote", parametros["lote"]]
+    elif "limit" in parametros:
+        argv += ["--limit", str(parametros["limit"])]
+    return argv
+
 
 _SAVE_INTERVAL_SECONDS = 1.0
 _STREAM_LINE_LIMIT = 1024 * 1024
@@ -162,9 +185,7 @@ class JobRunner:
                 self._queue.task_done()
 
     async def _run(self, job: Job) -> None:
-        argv = list(self.settings.scripts[job.script])
-        if "limit" in job.parameters:
-            argv += ["--limit", str(job.parameters["limit"])]
+        argv = montar_argv(self.settings.scripts[job.script], job.script, job.parameters)
 
         env = {k: v for k, v in os.environ.items() if not k.startswith("VM_")}
         env.update(RPA_JOB_ID=job.job_id, RPA_EXECUTION_ID=job.execution_id, PYTHONUNBUFFERED="1")
@@ -249,7 +270,7 @@ class JobRunner:
                 last_save = time.monotonic()
 
     def _registrar_resultado(self, job: Job, prefix: str, payload: str, tail: deque[str]) -> None:
-        """Guarda no outbox os itens de uma linha ::extracao/::designacao (enviados depois ao painel)."""
+        """Guarda no outbox os itens de uma linha de resultado (enviados depois ao painel)."""
         tipo, campo_data, metrica = RESULT_PREFIXES[prefix]
         try:
             data = json.loads(payload)

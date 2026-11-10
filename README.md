@@ -60,29 +60,39 @@ Veja [examples/fake_rpa.py](examples/fake_rpa.py).
 
 - O comando vem da allowlist; nada da requisição é interpretado como comando.
   `limit` é repassado como `--limit N` e em `RPA_LIMIT`. Também recebem `RPA_JOB_ID` e `RPA_EXECUTION_ID`.
+- `envio_aria` aceita só `lote` (texto) e `sem_aria` (booleano); os outros scripts, só `limit`.
+  Parâmetro fora disso → `422`. Flags montadas para o `envio_aria`:
+
+  | O painel manda | A VM roda |
+  |---|---|
+  | `{}` | `--enviar --sem-confirmacao` |
+  | `{"lote": "opme"}` | `--enviar --sem-confirmacao --lote opme` |
+  | `{"sem_aria": true}` | `--sem-aria` |
+  | `{"sem_aria": true, "lote": "odonto"}` | `--sem-aria --lote odonto` |
 - Variáveis `VM_*` (incluindo o token) **não** são repassadas aos scripts.
 - stdout/stderr viram `log_tail` (com horário). Padrões como `senha=...`, `token: ...` e `Bearer ...`
   são mascarados, mas o script não deve imprimir dados sensíveis.
 - Linha `::metrics {"extraidos": 120}` atualiza as métricas (valores numéricos, mesclados).
-- Linhas `::extracao` e `::designacao` são resultados para o banco de senhas do painel (ver abaixo).
+- Linhas `::extracao`, `::designacao` e `::envio_aria` são resultados para o banco de senhas do painel (ver abaixo).
 - Saída `0` → `SUCCEEDED`; outro código → `FAILED` com a última linha de log no `error`.
 - Cancelamento envia SIGTERM ao grupo de processos e SIGKILL após o tempo de tolerância.
 
 ## Envio dos resultados ao painel
 
 O script imprime cada resultado numa linha; a API guarda, agrupa e envia ao painel
-(`POST {VM_PAINEL_URL}/api/rpa/ingestao/extracoes` e `.../designacoes`) com o `execution_id` do job e
+(`POST {VM_PAINEL_URL}/api/rpa/ingestao/extracoes`, `.../designacoes` e `.../envios-aria`) com o `execution_id` do job e
 o mesmo `VM_API_TOKEN` (o painel autentica a máquina por ele).
 
 ```
 ::extracao {"senha": "91787170"}
 ::designacao {"senha": "91612540", "setor": "AUTORIZAÇÃO", "status": "Em análise", "tipo": "...", "situacao": "Aberta", "plano": "...", "regra": "...", "designada_em": "2026-10-19T16:10:29-03:00"}
+::envio_aria {"senha": "91612540", "lote": "PRAZO", "auditoria_id": "3681", "enviada_em": "2026-10-31T10:12:00-03:00"}
 ```
 
 - O valor pode ser um objeto ou uma lista de objetos. `senha` é obrigatória; na designação, `setor` também.
   Valores `null` são omitidos.
-- Sem `extraida_em` / `designada_em`, vale o horário em que a API leu a linha.
-- Essas linhas não entram no `log_tail`. Cada item conta em `metrics.extraidos` / `metrics.designados`;
+- Sem `extraida_em` / `designada_em` / `enviada_em`, vale o horário em que a API leu a linha.
+- Essas linhas não entram no `log_tail`. Cada item conta em `metrics.extraidos` / `metrics.designados` / `metrics.enviados_aria`;
   não misture com `::metrics` para a mesma chave.
 - Item com formato inválido é descartado e o log mostra um aviso.
 - Lotes de até 1000 itens, no máximo 1 requisição por segundo (o painel aceita 60/min). O envio
