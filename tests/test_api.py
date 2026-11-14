@@ -42,6 +42,7 @@ def client(tmp_path: Path):
             "designacao": [sys.executable, str(script), "fail"],
             "lento": [sys.executable, str(script), "slow"],
             "envio_aria": [sys.executable, str(script), "argv"],
+            "conferencia_aria": [sys.executable, str(script), "argv"],
         },
         data_dir=tmp_path / "data",
         cancel_grace_seconds=1,
@@ -126,6 +127,11 @@ def test_failed_job(client):
         {"script": "envio_aria", "parameters": {"limit": 10}},
         {"script": "envio_aria", "parameters": {"lote": "opme; rm -rf /"}},
         {"script": "envio_aria", "parameters": {"sem_aria": "sim"}},
+        {"script": "envio_aria", "parameters": {"data": "2026-11-14"}},
+        {"script": "conferencia_aria", "parameters": {"data": "14/11/2026"}},
+        {"script": "conferencia_aria", "parameters": {"data": "2026-11-14; rm -rf /"}},
+        {"script": "conferencia_aria", "parameters": {"sem_aria": True}},
+        {"script": "conferencia_aria", "parameters": {"limit": 10}},
     ],
 )
 def test_rejects_invalid_payload(client, kwargs):
@@ -181,3 +187,20 @@ def test_envio_aria_monta_flags_do_painel(client, parameters, esperado):
     job = wait_final(client, job_id)
     assert job["status"] == "SUCCEEDED"
     assert job["log_tail"][0].split(" ", 1)[1] == f"args: {esperado}"
+
+
+@pytest.mark.parametrize(
+    ("parameters", "esperado"),
+    [
+        ({}, ""),
+        ({"data": "2026-11-14"}, "--data 2026-11-14"),
+        ({"data": "2026-11-14", "lote": "prazo"}, "--data 2026-11-14 --lote prazo"),
+        ({"sem_siags": True, "lote": "opme"}, "--lote opme --sem-siags"),
+        ({"sem_siags": False}, ""),
+    ],
+)
+def test_conferencia_aria_monta_flags_do_painel(client, parameters, esperado):
+    job_id = create(client, script="conferencia_aria", parameters=parameters).json()["job_id"]
+    job = wait_final(client, job_id)
+    assert job["status"] == "SUCCEEDED"
+    assert job["log_tail"][0].split(" ", 1)[1].rstrip() == f"args: {esperado}".rstrip()

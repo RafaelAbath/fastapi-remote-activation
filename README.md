@@ -69,6 +69,16 @@ Veja [examples/fake_rpa.py](examples/fake_rpa.py).
   | `{"lote": "opme"}` | `--enviar --sem-confirmacao --lote opme` |
   | `{"sem_aria": true}` | `--sem-aria` |
   | `{"sem_aria": true, "lote": "odonto"}` | `--sem-aria --lote odonto` |
+- `conferencia_aria` (Relatório Aria, `conferencia_aria.py` do designacao-automacao: só lê a Aria e o SIAGS,
+  grava a aba Conferência Aria e o banco do painel) aceita `data` (`AAAA-MM-DD`), `lote` e `sem_siags`:
+
+  | O painel manda | A VM roda |
+  |---|---|
+  | `{}` | (hoje, todos os lotes, com consulta ao SIAGS nas pendências) |
+  | `{"data": "2026-11-14", "lote": "prazo"}` | `--data 2026-11-14 --lote prazo` |
+  | `{"sem_siags": true}` | `--sem-siags` |
+
+  Na VM, acrescente ao `VM_SCRIPTS`: `"conferencia_aria": ["<venv>/bin/python", "<pasta>/conferencia_aria.py"]`.
 - Variáveis `VM_*` (incluindo o token) **não** são repassadas aos scripts.
 - stdout/stderr viram `log_tail` (com horário). Padrões como `senha=...`, `token: ...` e `Bearer ...`
   são mascarados, mas o script não deve imprimir dados sensíveis.

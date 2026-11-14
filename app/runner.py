@@ -30,7 +30,7 @@ RESULT_PREFIXES = {
 _CAMPOS_OBRIGATORIOS = {"extracao": ("senha",), "designacao": ("senha", "setor"), "envio_aria": ("senha",)}
 
 # Parâmetros aceitos por script (nome em VM_SCRIPTS); os não listados aceitam só `limit`.
-PARAMETROS_POR_SCRIPT = {"envio_aria": {"lote", "sem_aria"}}
+PARAMETROS_POR_SCRIPT = {"envio_aria": {"lote", "sem_aria"}, "conferencia_aria": {"data", "lote", "sem_siags"}}
 PARAMETROS_PADRAO = {"limit"}
 
 
@@ -46,6 +46,14 @@ def montar_argv(base: list[str], script: str, parametros: dict) -> list[str]:
         argv += ["--sem-aria"] if parametros.get("sem_aria") else ["--enviar", "--sem-confirmacao"]
         if "lote" in parametros:
             argv += ["--lote", parametros["lote"]]
+    elif script == "conferencia_aria":
+        # Relatório Aria (conferencia_aria.py): só lê a Aria e o SIAGS; grava a aba e o banco do painel.
+        if "data" in parametros:
+            argv += ["--data", parametros["data"]]
+        if "lote" in parametros:
+            argv += ["--lote", parametros["lote"]]
+        if parametros.get("sem_siags"):
+            argv += ["--sem-siags"]
     elif "limit" in parametros:
         argv += ["--limit", str(parametros["limit"])]
     return argv
