@@ -43,6 +43,8 @@ def client(tmp_path: Path):
             "lento": [sys.executable, str(script), "slow"],
             "envio_aria": [sys.executable, str(script), "argv"],
             "conferencia_aria": [sys.executable, str(script), "argv"],
+            # Configurado com --enviar por engano: a prévia tem de tirar a flag.
+            "previa_envio": [sys.executable, str(script), "argv", "--enviar"],
         },
         data_dir=tmp_path / "data",
         cancel_grace_seconds=1,
@@ -204,3 +206,15 @@ def test_conferencia_aria_monta_flags_do_painel(client, parameters, esperado):
     job = wait_final(client, job_id)
     assert job["status"] == "SUCCEEDED"
     assert job["log_tail"][0].split(" ", 1)[1].rstrip() == f"args: {esperado}".rstrip()
+
+
+def test_previa_envio_roda_sem_nenhuma_flag_de_envio(client):
+    job_id = create(client, script="previa_envio").json()["job_id"]
+    job = wait_final(client, job_id)
+    assert job["status"] == "SUCCEEDED"
+    assert job["log_tail"][0].split(" ", 1)[1] == "args: "
+
+
+@pytest.mark.parametrize("parameters", [{"limit": 5}, {"sem_aria": True}, {"lote": "opme"}])
+def test_previa_envio_nao_aceita_parametros(client, parameters):
+    assert create(client, script="previa_envio", parameters=parameters).status_code == 422

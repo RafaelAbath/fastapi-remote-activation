@@ -60,7 +60,7 @@ Veja [examples/fake_rpa.py](examples/fake_rpa.py).
 
 - O comando vem da allowlist; nada da requisição é interpretado como comando.
   `limit` é repassado como `--limit N` e em `RPA_LIMIT`. Também recebem `RPA_JOB_ID` e `RPA_EXECUTION_ID`.
-- `envio_aria` aceita só `lote` (texto) e `sem_aria` (booleano); os outros scripts, só `limit`.
+- `envio_aria` aceita só `lote` (texto) e `sem_aria` (booleano); `previa_envio`, nenhum; os outros scripts, só `limit`.
   Parâmetro fora disso → `422`. Flags montadas para o `envio_aria`:
 
   | O painel manda | A VM roda |
@@ -69,6 +69,10 @@ Veja [examples/fake_rpa.py](examples/fake_rpa.py).
   | `{"lote": "opme"}` | `--enviar --sem-confirmacao --lote opme` |
   | `{"sem_aria": true}` | `--sem-aria` |
   | `{"sem_aria": true, "lote": "odonto"}` | `--sem-aria --lote odonto` |
+- `previa_envio` (botão "Gerar prévia do envio" do painel, liberado para todos) roda o comando do
+  `VM_SCRIPTS` **sem nenhuma flag**. Na VM: `"previa_envio": ["<venv>/bin/python", "<pasta>/envio_aria.py"]`.
+  Se o comando tiver `--enviar`, `--sem-confirmacao` ou `--sem-aria`, a API tira essas flags: a prévia nunca
+  vira envio real. Ela grava a prévia e manda o relatório do envio direto ao painel (`relatorio_aria.py`).
 - `conferencia_aria` (Relatório Aria, `conferencia_aria.py` do designacao-automacao: só lê a Aria e o SIAGS,
   grava a aba Conferência Aria e o banco do painel) aceita `data` (`AAAA-MM-DD`), `lote` e `sem_siags`:
 
