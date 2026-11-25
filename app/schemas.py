@@ -30,6 +30,9 @@ class JobParameters(BaseModel):
     # envio_aria: lote da Aria (ex.: "opme") e prévia sem consultar a Aria.
     lote: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[\w .-]+$")
     sem_aria: bool | None = Field(default=None, strict=True)
+    # conferencia_aria (Relatório Aria): dia do envio (AAAA-MM-DD) e sem a consulta ao SIAGS nas pendências.
+    data: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    sem_siags: bool | None = Field(default=None, strict=True)
 
 
 class JobCreateRequest(BaseModel):

@@ -30,8 +30,17 @@ RESULT_PREFIXES = {
 _CAMPOS_OBRIGATORIOS = {"extracao": ("senha",), "designacao": ("senha", "setor"), "envio_aria": ("senha",)}
 
 # Parâmetros aceitos por script (nome em VM_SCRIPTS); os não listados aceitam só `limit`.
-PARAMETROS_POR_SCRIPT = {"envio_aria": {"lote", "sem_aria"}}
+# previa_envio não aceita nenhum: é o envio_aria.py sem --enviar (monta os lotes e o relatório, não envia).
+PARAMETROS_POR_SCRIPT = {
+    "envio_aria": {"lote", "sem_aria"},
+    "conferencia_aria": {"data", "lote", "sem_siags"},
+    "previa_envio": set(),
+}
 PARAMETROS_PADRAO = {"limit"}
+
+# Flags que tornam o envio_aria.py um envio real (ou mudam a prévia): nunca rodam na prévia, mesmo que
+# alguém as ponha no comando do VM_SCRIPTS por engano.
+_FLAGS_PROIBIDAS_NA_PREVIA = {"--enviar", "--sem-confirmacao", "--sem-aria"}
 
 
 def parametros_aceitos(script: str) -> set[str]:
@@ -41,11 +50,22 @@ def parametros_aceitos(script: str) -> set[str]:
 def montar_argv(base: list[str], script: str, parametros: dict) -> list[str]:
     """Comando do VM_SCRIPTS + as flags que os parâmetros do painel pedem."""
     argv = list(base)
+    if script == "previa_envio":
+        # O botão "Gerar prévia" do painel é liberado para todos: a prévia nunca pode virar envio real.
+        return [a for a in argv if a not in _FLAGS_PROIBIDAS_NA_PREVIA]
     if script == "envio_aria":
         # Regra do painel: sem `sem_aria`, envia de verdade (a confirmação do terminal não se aplica).
         argv += ["--sem-aria"] if parametros.get("sem_aria") else ["--enviar", "--sem-confirmacao"]
         if "lote" in parametros:
             argv += ["--lote", parametros["lote"]]
+    elif script == "conferencia_aria":
+        # Relatório Aria (conferencia_aria.py): só lê a Aria e o SIAGS; grava a aba e o banco do painel.
+        if "data" in parametros:
+            argv += ["--data", parametros["data"]]
+        if "lote" in parametros:
+            argv += ["--lote", parametros["lote"]]
+        if parametros.get("sem_siags"):
+            argv += ["--sem-siags"]
     elif "limit" in parametros:
         argv += ["--limit", str(parametros["limit"])]
     return argv
